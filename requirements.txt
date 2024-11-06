@@ -1,0 +1,8 @@
+asyncio
+websockets-proxy
+fake-useragent
+loguru
+requests
+uuid
+websockets
+python-socks[asyncio]
