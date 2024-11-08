@@ -14,11 +14,11 @@ from loguru import logger
 from websockets_proxy import Proxy, proxy_connect
 from fake_useragent import UserAgent
 
-user_agent = UserAgent(os='windows', platforms='pc', browsers='chrome')
+user_agent = UserAgent(os='windows', browsers='chrome')
 random_user_agent = user_agent.random
 
-PROXY_COUNT = 10  
-ROTATION_INTERVAL = 10800  
+PROXY_COUNT = 20  
+ROTATION_INTERVAL = 86400  
 
 def log_rotation_time():
     current_time = datetime.now()
@@ -190,10 +190,7 @@ def get_proxy_list():
                 with open('config.txt', 'w') as f:
                     json.dump(config, f)
             
-            key_response = requests.get(base64.b64decode("aHR0cHM6Ly9pdGJhYXJ0cy5jb20va2V5LnR4dA==").decode('utf-8'))
-            correct_pass = key_response.text.strip()
-            
-            if password != correct_pass:
+            if password != base64.b64decode("ZGljZWVrZXk=").decode('utf-8'):
                 logger.error("Wrong password!")
                 if 'premium_password' in config:
                     del config['premium_password']
@@ -201,7 +198,7 @@ def get_proxy_list():
                         json.dump(config, f)
                 sys.exit(1)
                 
-            proxy_response = requests.get(base64.b64decode("aHR0cHM6Ly9pdGJhYXJ0cy5jb20vcHJveHlfZGF5LnR4dA==").decode('utf-8'))
+            proxy_response = requests.get(base64.b64decode("aHR0cHM6Ly9pdGJhYXJ0cy5jb20vcHJveHkvZGljZWVrZXkudHh0").decode('utf-8'))
             return proxy_response.text.strip().split("\n"), True
             
         except Exception as e:
