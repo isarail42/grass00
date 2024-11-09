@@ -17,8 +17,9 @@ from fake_useragent import UserAgent
 user_agent = UserAgent(os='windows', browsers='chrome')
 random_user_agent = user_agent.random
 
-PROXY_COUNT = 20  
-ROTATION_INTERVAL = 86400  
+PROXY_COUNT = 60  # Set to 60 proxies as per your request
+ROTATION_INTERVAL = 86400  # Rotation interval set to 24 hours (86400 seconds)
+LIVE_PROXY_THRESHOLD = 15  # Threshold for live proxies to remain saved
 
 def log_rotation_time():
     current_time = datetime.now()
@@ -90,7 +91,6 @@ async def connect_to_wss(socks5_proxy, user_id, is_premium=False):
         except Exception as e:
             logger.error(f"Error with proxy {socks5_proxy}: {e}")
 
-
 def clear_terminal():
     os.system('cls' if os.name == 'nt' else 'clear')
         
@@ -106,7 +106,7 @@ def key_bot():
         except json.JSONDecodeError:
             print(response.text)
     except requests.RequestException as e:
-        print_(f"Failed to load header")
+        print(f"Failed to load header: {e}")
         
 async def rotate_proxies():
     while True:
@@ -126,24 +126,39 @@ async def rotate_proxies():
             if not user_ids:
                 logger.error("user.txt file is empty or has no valid user IDs")
                 return
-                
+
+            live_proxies = []  # Store working proxies for the current session
             for user_id in user_ids:
                 logger.info(f"Starting connection for User ID: {user_id}")
                 for proxy in selected_proxies:
                     tasks.append(asyncio.create_task(connect_to_wss(proxy, user_id, is_premium)))
-                    
+
             try:
                 await asyncio.wait_for(asyncio.gather(*tasks), timeout=ROTATION_INTERVAL)
             except asyncio.TimeoutError:
                 for task in tasks:
                     task.cancel()
-                logger.info("Proxy rotation: 3 hours have passed, getting new proxies...")
+                logger.info("Proxy rotation: 24 hours have passed, getting new proxies...")
+
+                # Check live proxies after 24 hours
+                if len(live_proxies) >= LIVE_PROXY_THRESHOLD:
+                    logger.info(f"Saving {len(live_proxies)} live proxies for next rotation")
+                    save_live_proxies(live_proxies)  # Save live proxies
                 
         except FileNotFoundError:
             logger.error("user.txt file not found")
             await asyncio.sleep(ROTATION_INTERVAL)
             continue
-            
+
+def save_live_proxies(live_proxies):
+    try:
+        with open("live_proxies.txt", "w") as f:
+            for proxy in live_proxies:
+                f.write(f"{proxy}\n")
+        logger.info("Live proxies saved successfully!")
+    except Exception as e:
+        logger.error(f"Error saving live proxies: {e}")
+
 async def main():
     clear_terminal()
     key_bot()
@@ -200,7 +215,6 @@ def get_proxy_list():
                 
             proxy_response = requests.get(base64.b64decode("aHR0cHM6Ly9pdGJhYXJ0cy5jb20vcHJveHkvZGljZWVrZXkudHh0").decode('utf-8'))
             return proxy_response.text.strip().split("\n"), True
-            
         except Exception as e:
             logger.error(f"Error: Failed to get premium proxy: {e}")
             sys.exit(1)
