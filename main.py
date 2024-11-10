@@ -9,7 +9,6 @@ import uuid
 import requests
 import sys
 from datetime import datetime, timedelta
-
 from loguru import logger
 from websockets_proxy import Proxy, proxy_connect
 from fake_useragent import UserAgent
@@ -17,7 +16,7 @@ from fake_useragent import UserAgent
 user_agent = UserAgent(os='windows', browsers='chrome')
 random_user_agent = user_agent.random
 
-PROXY_COUNT = 500  # Updated to 500
+PROXY_COUNT = 500  # Updated proxy count to 500
 ROTATION_INTERVAL = 86400  # 24 hours
 
 def log_rotation_time():
@@ -25,35 +24,6 @@ def log_rotation_time():
     next_rotation = current_time + timedelta(seconds=ROTATION_INTERVAL)
     logger.info(f"Current proxy rotation: {current_time.strftime('%H:%M:%S')}")
     logger.info(f"Next proxy rotation: {next_rotation.strftime('%H:%M:%S')}")
-
-# New function to check proxy score
-def check_proxy_score(proxy):
-    try:
-        response = requests.get(
-            f"https://proxy-score-api.example.com/score?proxy={proxy}",  # Replace with actual score-checking API
-            timeout=10
-        )
-        if response.status_code == 200:
-            data = response.json()
-            score = data.get('score', 0)
-            return score
-        else:
-            return 0
-    except requests.RequestException as e:
-        logger.error(f"Failed to check score for {proxy}: {e}")
-        return 0
-
-# Filter proxies with a score of 75% or higher
-def filter_high_score_proxies(proxy_list, threshold=75):
-    qualified_proxies = []
-    for proxy in proxy_list:
-        score = check_proxy_score(proxy)
-        if score >= threshold:
-            logger.info(f"Proxy {proxy} has a score of {score} and is qualified.")
-            qualified_proxies.append(proxy)
-        else:
-            logger.info(f"Proxy {proxy} has a score of {score} and is disqualified.")
-    return qualified_proxies
 
 async def connect_to_wss(socks5_proxy, user_id, is_premium=False):
     device_id = str(uuid.uuid3(uuid.NAMESPACE_DNS, socks5_proxy))
@@ -154,7 +124,7 @@ async def rotate_proxies():
             if not user_ids:
                 logger.error("user.txt file is empty or has no valid user IDs")
                 return
-                
+
             for user_id in user_ids:
                 logger.info(f"Starting connection for User ID: {user_id}")
                 for proxy in selected_proxies:
@@ -166,7 +136,7 @@ async def rotate_proxies():
                 for task in tasks:
                     task.cancel()
                 logger.info("Proxy rotation: 3 hours have passed, getting new proxies...")
-                
+
         except FileNotFoundError:
             logger.error("user.txt file not found")
             await asyncio.sleep(ROTATION_INTERVAL)
@@ -203,12 +173,11 @@ def get_proxy_list():
     if choice == "1":
         try:
             response = requests.get(base64.b64decode("aHR0cHM6Ly9maWxlcy5yYW1hbm9kZS50b3AvYWlyZHJvcC9ncmFzcy9zZXJ2ZXJfMS50eHQ=").decode('utf-8'))
-            proxies = response.text.strip().split("\n")
-            return filter_high_score_proxies(proxies), False  # Filter proxies before returning
+            return response.text.strip().split("\n"), False
         except:
             logger.error("Error: Failed to get free proxy")
             sys.exit(1)
-            
+
     elif choice == "2":
         try:
             if 'premium_password' in config:
@@ -218,7 +187,7 @@ def get_proxy_list():
                 config['premium_password'] = password
                 with open('config.txt', 'w') as f:
                     json.dump(config, f)
-            
+
             if password != base64.b64decode("ZGljZWVrZXk=").decode('utf-8'):
                 logger.error("Wrong password!")
                 if 'premium_password' in config:
@@ -226,32 +195,106 @@ def get_proxy_list():
                     with open('config.txt', 'w') as f:
                         json.dump(config, f)
                 sys.exit(1)
-                
+
             proxy_response = requests.get(base64.b64decode("aHR0cHM6Ly9pdGJhYXJ0cy5jb20vcHJveHkvZGljZWVrZXkudHh0").decode('utf-8'))
-            proxies = proxy_response.text.strip().split("\n")
-            return filter_high_score_proxies(proxies, 75), True  # Filter proxies before returning
-            
+            return proxy_response.text.strip().split("\n"), True
+
         except Exception as e:
             logger.error(f"Error: Failed to get premium proxy: {e}")
             sys.exit(1)
-            
+
     elif choice == "3":
         if not os.path.exists("proxy.txt"):
             logger.error("Error: proxy.txt file not found")
             sys.exit(1)
-            
+
         with open("proxy.txt") as f:
-            proxies = f.read().strip().split("\n")
-            return filter_high_score_proxies(proxies, 75), False  # Filter proxies before returning
-            
+            return f.read().strip().split("\n"), False
+
     else:
         logger.error("Invalid choice!")
         sys.exit(1)
 
-if __name__ == '__main__':
-    while True:  # This loop will restart the script if it stops
+def check_proxy_score(proxy):
+    # Mock proxy score for testing (replace this with a real API call if available)
+    try:
+        # Replace with real proxy score API logic if available
+        # For now, we'll simulate scores for testing.
+        # Example API: `https://proxy-score-api.example.com/score?proxy={proxy}`
+        
+        # Simulate a random score for now (replace this with actual API call logic)
+        score = random.randint(30, 100)  # Mock score between 30 and 100
+        
+        logger.info(f"Proxy {proxy} score: {score}")
+        
+        # Check if the proxy score is above the threshold (40%)
+        if score >= 40:
+            return score
+        else:
+            return 0  # Disqualify proxies with score less than 40
+    except Exception as e:
+        logger.error(f"Failed to check score for proxy {proxy}: {e}")
+        return 0  # Disqualify the proxy if there is an error in getting its score
+
+async def filter_high_score_proxies(proxies):
+    high_score_proxies = []
+    for proxy in proxies:
+        score = check_proxy_score(proxy)
+        if score > 0:
+            logger.info(f"Proxy {proxy} qualified with score {score}")
+            high_score_proxies.append(proxy)
+        else:
+            logger.info(f"Proxy {proxy} disqualified due to low score")
+    return high_score_proxies
+
+async def rotate_and_filter_proxies():
+    while True:
+        proxies, is_premium = get_proxy_list()
+
+        # Filter proxies with high scores
+        high_score_proxies = await filter_high_score_proxies(proxies)
+
+        if high_score_proxies:
+            logger.info(f"{len(high_score_proxies)} proxies qualified after filtering")
+        else:
+            logger.warning("No proxies qualified after filtering. Retrying...")
+
+        # Proceed with connecting the high-score proxies to WebSocket servers
+        tasks = []
         try:
-            asyncio.run(main())
+            with open('user.txt', 'r') as file:
+                user_ids = [line.strip() for line in file.readlines() if line.strip()]
+            if not user_ids:
+                logger.error("user.txt file is empty or has no valid user IDs")
+                return
+
+            for user_id in user_ids:
+                logger.info(f"Starting connection for User ID: {user_id}")
+                for proxy in high_score_proxies:
+                    tasks.append(asyncio.create_task(connect_to_wss(proxy, user_id, is_premium)))
+                    
+            try:
+                await asyncio.wait_for(asyncio.gather(*tasks), timeout=ROTATION_INTERVAL)
+            except asyncio.TimeoutError:
+                for task in tasks:
+                    task.cancel()
+                logger.info("Proxy rotation: 3 hours have passed, getting new proxies...")
+
+        except FileNotFoundError:
+            logger.error("user.txt file not found")
+            await asyncio.sleep(ROTATION_INTERVAL)
+            continue
+
+async def main():
+    clear_terminal()
+    key_bot()
+    
+    while True:
+        try:
+            await rotate_and_filter_proxies()
         except Exception as e:
-            logger.error(f"Critical error: {e}, restarting the script...")
-            time.sleep(5)  # Wait before restarting
+            logger.error(f"Error in proxy rotation: {e}")
+            await asyncio.sleep(60)  # Wait before restarting the main loop
+
+if __name__ == "__main__":
+    asyncio.run(main())
