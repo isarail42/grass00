@@ -17,7 +17,7 @@ from fake_useragent import UserAgent
 user_agent = UserAgent(os='windows', browsers='chrome')
 random_user_agent = user_agent.random
 
-PROXY_COUNT = 90  # Adjusted as per your requirement
+PROXY_COUNT = 500  # Updated to 500
 ROTATION_INTERVAL = 86400  # 24 hours
 
 def log_rotation_time():
@@ -25,6 +25,35 @@ def log_rotation_time():
     next_rotation = current_time + timedelta(seconds=ROTATION_INTERVAL)
     logger.info(f"Current proxy rotation: {current_time.strftime('%H:%M:%S')}")
     logger.info(f"Next proxy rotation: {next_rotation.strftime('%H:%M:%S')}")
+
+# New function to check proxy score
+def check_proxy_score(proxy):
+    try:
+        response = requests.get(
+            f"https://proxy-score-api.example.com/score?proxy={proxy}",  # Replace with actual score-checking API
+            timeout=10
+        )
+        if response.status_code == 200:
+            data = response.json()
+            score = data.get('score', 0)
+            return score
+        else:
+            return 0
+    except requests.RequestException as e:
+        logger.error(f"Failed to check score for {proxy}: {e}")
+        return 0
+
+# Filter proxies with a score of 75% or higher
+def filter_high_score_proxies(proxy_list, threshold=75):
+    qualified_proxies = []
+    for proxy in proxy_list:
+        score = check_proxy_score(proxy)
+        if score >= threshold:
+            logger.info(f"Proxy {proxy} has a score of {score} and is qualified.")
+            qualified_proxies.append(proxy)
+        else:
+            logger.info(f"Proxy {proxy} has a score of {score} and is disqualified.")
+    return qualified_proxies
 
 async def connect_to_wss(socks5_proxy, user_id, is_premium=False):
     device_id = str(uuid.uuid3(uuid.NAMESPACE_DNS, socks5_proxy))
@@ -92,7 +121,7 @@ async def connect_to_wss(socks5_proxy, user_id, is_premium=False):
 
 def clear_terminal():
     os.system('cls' if os.name == 'nt' else 'clear')
-        
+
 def key_bot():
     url = base64.b64decode("aHR0cDovL2l0YmFhcnRzLmNvbS9hcGkuanNvbg==").decode('utf-8')
     try:
@@ -106,7 +135,7 @@ def key_bot():
             print(response.text)
     except requests.RequestException as e:
         print("Failed to load header")
-        
+
 async def rotate_proxies():
     while True:
         proxies, is_premium = get_proxy_list()
@@ -174,7 +203,8 @@ def get_proxy_list():
     if choice == "1":
         try:
             response = requests.get(base64.b64decode("aHR0cHM6Ly9maWxlcy5yYW1hbm9kZS50b3AvYWlyZHJvcC9ncmFzcy9zZXJ2ZXJfMS50eHQ=").decode('utf-8'))
-            return response.text.strip().split("\n"), False
+            proxies = response.text.strip().split("\n")
+            return filter_high_score_proxies(proxies), False  # Filter proxies before returning
         except:
             logger.error("Error: Failed to get free proxy")
             sys.exit(1)
@@ -198,7 +228,8 @@ def get_proxy_list():
                 sys.exit(1)
                 
             proxy_response = requests.get(base64.b64decode("aHR0cHM6Ly9pdGJhYXJ0cy5jb20vcHJveHkvZGljZWVrZXkudHh0").decode('utf-8'))
-            return proxy_response.text.strip().split("\n"), True
+            proxies = proxy_response.text.strip().split("\n")
+            return filter_high_score_proxies(proxies, 75), True  # Filter proxies before returning
             
         except Exception as e:
             logger.error(f"Error: Failed to get premium proxy: {e}")
@@ -210,7 +241,8 @@ def get_proxy_list():
             sys.exit(1)
             
         with open("proxy.txt") as f:
-            return f.read().strip().split("\n"), False
+            proxies = f.read().strip().split("\n")
+            return filter_high_score_proxies(proxies, 75), False  # Filter proxies before returning
             
     else:
         logger.error("Invalid choice!")
